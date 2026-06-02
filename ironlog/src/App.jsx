@@ -179,9 +179,9 @@ export default function App() {
     setLastType(sessionType); toast2(`${sessionType} day saved! Great work 💪`,TC[sessionType]); setView("home");
   }
 
-  function getExNames(){const s=new Set();sessions.forEach(s=>s.exercises?.forEach(e=>s.add(e.name)));return[...s].sort();}
-  function getMaxes(name){const b={};sessions.forEach(s=>{const ex=s.exercises?.find(e=>e.name===name);if(!ex)return;const best=ex.sets.reduce((m,s)=>{const w=parseFloat(s.weight)||0;return w>m?w:m;},0);if(best>0)b[s.date]=best;});return Object.entries(b).map(([date,weight])=>({date,weight})).sort((a,b)=>new Date(a.date)-new Date(b.date));}
-  function getHistory(name){const p=[];sessions.forEach(s=>{const ex=s.exercises?.find(e=>e.name===name);if(!ex)return;ex.sets.forEach((set,si)=>{const w=parseFloat(set.weight),r=parseInt(set.reps);if(w&&r)p.push({date:s.date,setIndex:si,weight:w,reps:r,e1rm:Math.round(w*(1+r/30)*10)/10});});});return p;}
+  function getExNames(){const names=new Set();sessions.forEach(sess=>sess.exercises?.forEach(e=>names.add(e.name)));return[...names].sort();}
+  function getMaxes(name){const b={};sessions.forEach(sess=>{const ex=sess.exercises?.find(e=>e.name===name);if(!ex)return;const best=ex.sets.reduce((m,set)=>{const w=parseFloat(set.weight)||0;return w>m?w:m;},0);if(best>0)b[sess.date]={weight:best,type:sess.type};});return Object.entries(b).map(([date,{weight,type}])=>({date,weight,type})).sort((a,b)=>new Date(a.date)-new Date(b.date));}
+  function getHistory(name){const p=[];sessions.forEach(sess=>{const ex=sess.exercises?.find(e=>e.name===name);if(!ex)return;ex.sets.forEach((set,si)=>{const w=parseFloat(set.weight),r=parseInt(set.reps);if(w&&r)p.push({date:sess.date,setIndex:si,weight:w,reps:r,e1rm:Math.round(w*(1+r/30)*10)/10});});});return p;}
 
   if (authLoading) return <Splash/>;
   if (!user) return <AuthScreen/>;
@@ -477,7 +477,7 @@ export default function App() {
               :(
                 <div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
-                    {(()=>{const names=new Set();sessions.forEach(s=>s.exercises?.forEach(e=>names.add(e.name)));return[...names].sort();})().map(n=>(
+                    {getExNames().map(n=>(
                       <button key={n} className="chip" onClick={()=>setAnalysisEx(n)} style={{padding:"8px 14px",borderRadius:20,border:`1.5px solid ${analysisEx===n?"#fff":"#1C1C1E"}`,background:analysisEx===n?"#1C1C1E":"#111",color:analysisEx===n?"#fff":"#555",fontWeight:500,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{n}</button>
                     ))}
                   </div>
