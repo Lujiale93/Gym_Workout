@@ -56,7 +56,7 @@ function AuthScreen() {
     setLoading(true); setError("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: "https://gym-workout-g61a3slo2-jiale-s-projects1.vercel.app" }
+      options: { redirectTo: "https://gym-workout-bay.vercel.app" }
     });
     if (error) { setError(error.message); setLoading(false); }
   }
