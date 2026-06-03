@@ -399,14 +399,16 @@ export default function App() {
 
       {/* Exercise picker sheet */}
       {pickerOpen&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",zIndex:150}} onClick={()=>activeSession.length>0&&(setPickerOpen(false),setPickerFilter(""))}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",zIndex:150}} onClick={()=>{setPickerOpen(false);setPickerFilter("");if(activeSession.length===0)setView("home");}}>
           <div style={{position:"absolute",bottom:0,left:0,right:0,background:"#111",borderRadius:"20px 20px 0 0",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px rgba(0,0,0,0.6)"}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"20px 20px 0"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <div style={{fontSize:18,fontWeight:700}}>Choose an Exercise</div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>setShowAddModal(true)} style={{background:TBG[sessionType],border:`1px solid ${TC[sessionType]}44`,color:TC[sessionType],padding:"6px 12px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Custom</button>
-                  {activeSession.length>0&&<button onClick={()=>{setPickerOpen(false);setPickerFilter("");}} style={{background:"#2C2C2E",border:"none",color:"#888",padding:"6px 12px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600}}>Done</button>}
+                  <button onClick={()=>{setPickerOpen(false);setPickerFilter("");if(activeSession.length===0)setView("home");}} style={{background:"#2C2C2E",border:"none",color:"#ccc",padding:"6px 14px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600}}>
+                    {activeSession.length===0?"← Back":"Done"}
+                  </button>
                 </div>
               </div>
               <input value={pickerFilter} onChange={e=>setPickerFilter(e.target.value)} placeholder="Search exercises or muscle..."
@@ -478,14 +480,9 @@ export default function App() {
               <div style={{fontSize:12,color:TC[suggested],fontWeight:600,letterSpacing:0.5,marginBottom:6}}>HEY {displayName.toUpperCase()}, NEXT UP</div>
               <div style={{fontSize:50,fontWeight:900,letterSpacing:-2,color:"#fff",marginBottom:4}}>{suggested}</div>
               <div style={{fontSize:14,color:"#555",marginBottom:22}}>Push → Pull → Legs rotation</div>
-              <button onClick={()=>startSession(suggested)} style={{width:"100%",padding:"16px",background:TG[suggested],border:"none",borderRadius:16,color:"#fff",fontWeight:800,fontSize:17,cursor:"pointer",boxShadow:`0 8px 24px ${TC[suggested]}40`,marginBottom:10}}>
+              <button onClick={()=>startSession(suggested)} style={{width:"100%",padding:"16px",background:TG[suggested],border:"none",borderRadius:16,color:"#fff",fontWeight:800,fontSize:17,cursor:"pointer",boxShadow:`0 8px 24px ${TC[suggested]}40`}}>
                 🏋️ Log Workout
               </button>
-              <div style={{display:"flex",gap:8}}>
-                {["Push","Pull","Legs"].filter(t=>t!==suggested).map(t=>(
-                  <button key={t} onClick={()=>startSession(t)} style={{flex:1,padding:"10px 0",borderRadius:12,border:"1px solid #222",background:"#111",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer"}}>Log {t} instead</button>
-                ))}
-              </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
               {[{l:"Total",v:sessions.length,e:"🏋️"},{l:"This Week",v:weekCount,e:"📅"},{l:"Last",v:recent?recent.type:"—",e:"⏱️"},{l:"Custom",v:totalCustom,e:"✏️"}].map(({l,v,e})=>(
