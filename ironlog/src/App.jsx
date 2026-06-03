@@ -478,9 +478,12 @@ export default function App() {
               <div style={{fontSize:12,color:TC[suggested],fontWeight:600,letterSpacing:0.5,marginBottom:6}}>HEY {displayName.toUpperCase()}, NEXT UP</div>
               <div style={{fontSize:50,fontWeight:900,letterSpacing:-2,color:"#fff",marginBottom:4}}>{suggested}</div>
               <div style={{fontSize:14,color:"#555",marginBottom:22}}>Push → Pull → Legs rotation</div>
-              <div style={{display:"flex",gap:10}}>
-                {["Push","Pull","Legs"].map(t=>(
-                  <button key={t} onClick={()=>startSession(t)} style={{flex:1,padding:"13px 0",borderRadius:14,border:`1.5px solid ${t===suggested?TC[t]:"#222"}`,background:t===suggested?TG[t]:"#111",color:t===suggested?"#fff":"#555",fontWeight:700,fontSize:15,cursor:"pointer"}}>{t}</button>
+              <button onClick={()=>startSession(suggested)} style={{width:"100%",padding:"16px",background:TG[suggested],border:"none",borderRadius:16,color:"#fff",fontWeight:800,fontSize:17,cursor:"pointer",boxShadow:`0 8px 24px ${TC[suggested]}40`,marginBottom:10}}>
+                🏋️ Log Workout
+              </button>
+              <div style={{display:"flex",gap:8}}>
+                {["Push","Pull","Legs"].filter(t=>t!==suggested).map(t=>(
+                  <button key={t} onClick={()=>startSession(t)} style={{flex:1,padding:"10px 0",borderRadius:12,border:"1px solid #222",background:"#111",color:"#555",fontWeight:600,fontSize:13,cursor:"pointer"}}>Log {t} instead</button>
                 ))}
               </div>
             </div>
@@ -525,14 +528,16 @@ export default function App() {
         {view==="session"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-              <div>
-                <div style={{fontSize:12,color:TC[sessionType],fontWeight:600,marginBottom:2,letterSpacing:0.5}}>{sessionType.toUpperCase()} DAY</div>
-                <div style={{fontSize:26,fontWeight:800}}>{activeSession.length} exercise{activeSession.length!==1?"s":""} · {activeSession.reduce((t,e)=>t+e.sets.length,0)} sets</div>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <button onClick={()=>setView("home")} style={{background:"#1C1C1E",border:"1px solid #2C2C2E",color:"#888",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                  ← Back
+                </button>
+                <div>
+                  <div style={{fontSize:12,color:TC[sessionType],fontWeight:600,marginBottom:1,letterSpacing:0.5}}>{sessionType.toUpperCase()} DAY</div>
+                  <div style={{fontSize:20,fontWeight:800}}>{activeSession.length} exercise{activeSession.length!==1?"s":""} · {activeSession.reduce((t,e)=>t+e.sets.length,0)} sets</div>
+                </div>
               </div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>setPickerOpen(true)} style={{background:TBG[sessionType],border:`1px solid ${TC[sessionType]}44`,color:TC[sessionType],padding:"8px 14px",borderRadius:12,cursor:"pointer",fontWeight:600,fontSize:14}}>+ Exercise</button>
-                <button onClick={()=>setView("home")} style={{width:36,height:36,borderRadius:"50%",background:"#1C1C1E",border:"none",color:"#888",fontSize:16,cursor:"pointer"}}>✕</button>
-              </div>
+              <button onClick={()=>setPickerOpen(true)} style={{background:TBG[sessionType],border:`1px solid ${TC[sessionType]}44`,color:TC[sessionType],padding:"8px 14px",borderRadius:12,cursor:"pointer",fontWeight:600,fontSize:14}}>+ Exercise</button>
             </div>
 
             {activeSession.length===0?(
@@ -559,6 +564,7 @@ export default function App() {
                   exData={currentExData}
                   sets={currentExSets}
                   prog={currentProg}
+                  sessions={sessions}
                   imgSrc={currentExData.imgId&&!imgErrors[currentExData.imgId]?`${IMAGE_BASE}/${currentExData.imgId}/${imgFrame[currentExData.imgId]??0}.jpg`:null}
                   onImgError={()=>setImgErrors(e=>({...e,[currentExData.imgId]:true}))}
                   onAddSet={(w,r)=>addSet(currentEx,w,r)}
@@ -748,24 +754,32 @@ export default function App() {
 }
 
 // ── Exercise Card (in-session logging) ────────────────────────────────────────
-function ExerciseCard({exData,sets,prog,imgSrc,onImgError,onAddSet,onRemoveSet,onRemoveExercise,color,gradient,bg}) {
+function ExerciseCard({exData,sets,prog,sessions,imgSrc,onImgError,onAddSet,onRemoveSet,onRemoveExercise,color,gradient,bg}) {
   const [weight,setWeight]=useState(prog?.weight?String(prog.weight):"");
   const [reps,setReps]=useState("");
   const [showTip,setShowTip]=useState(false);
   const [imgErr,setImgErr]=useState(false);
 
-  // Reset inputs when exercise changes but keep suggested weight
+  // Reset inputs when exercise changes
   useEffect(()=>{
     setWeight(prog?.weight?String(prog.weight):"");
     setReps("");
+    setShowTip(false);
   },[exData.name]);
 
   function handleAdd(){
-    if(!weight||!reps){return;}
+    if(!weight||!reps) return;
     onAddSet(weight,reps);
-    // Keep weight, clear reps for next set
-    setReps("");
+    setReps(""); // keep weight for next set
   }
+
+  // Find the last session that had this exercise
+  const lastSession = [...(sessions||[])].reverse().find(sess=>
+    sess.exercises?.some(e=>e.name===exData.name)
+  );
+  const lastSets = lastSession?.exercises?.find(e=>e.name===exData.name)?.sets||[];
+  const lastDate = lastSession ? new Date(lastSession.date).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}) : null;
+  const nextSetIdx = sets.length; // which set index we're about to log
 
   return(
     <div style={{background:"#111",borderRadius:20,padding:18,marginBottom:14,border:"1px solid #1C1C1E"}}>
@@ -793,40 +807,83 @@ function ExerciseCard({exData,sets,prog,imgSrc,onImgError,onAddSet,onRemoveSet,o
 
       {showTip&&!exData.custom&&<div style={{background:"#1C1C1E",borderRadius:12,padding:"10px 14px",fontSize:13,color:"#888",lineHeight:1.5,marginBottom:14}}>{exData.tip}</div>}
 
+      {/* ── LAST SESSION HISTORY ── */}
+      {lastDate&&lastSets.length>0&&(
+        <div style={{background:"#161616",border:"1px solid #222",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.5,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>LAST SESSION</span>
+            <span style={{color:"#444",fontWeight:500,fontSize:11}}>{lastDate}</span>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {lastSets.map((s,i)=>{
+              // Highlight the set matching the one we're about to log
+              const isNext=i===nextSetIdx;
+              return(
+                <div key={i} style={{flex:"1 1 auto",minWidth:64,background:isNext?"#1C2A1C":"#1C1C1E",border:`1px solid ${isNext?color+"44":"#2C2C2E"}`,borderRadius:10,padding:"8px 6px",textAlign:"center"}}>
+                  <div style={{fontSize:9,color:isNext?color:"#444",fontWeight:700,letterSpacing:0.5,marginBottom:4}}>SET {i+1}{isNext?" ↑":""}</div>
+                  <div style={{fontSize:16,fontWeight:800,color:isNext?"#fff":"#888"}}>{s.weight}<span style={{fontSize:10,color:"#555",fontWeight:500}}>kg</span></div>
+                  <div style={{fontSize:12,color:"#666",marginTop:2}}>{s.reps} reps</div>
+                </div>
+              );
+            })}
+          </div>
+          {/* Show best set from last session */}
+          {(()=>{
+            const best=lastSets.reduce((b,s)=>parseFloat(s.weight||0)>parseFloat(b.weight||0)?s:b,lastSets[0]);
+            return<div style={{fontSize:11,color:"#555",marginTop:8}}>Best last session: <span style={{color,fontWeight:600}}>{best.weight}kg × {best.reps} reps</span></div>;
+          })()}
+        </div>
+      )}
+
       {/* Progression hint */}
       {prog&&<div style={{display:"flex",gap:8,alignItems:"center",background:"#1C1C1E",borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:12,color:"#666"}}>
         <span>{prog.phase==="weight-up"?"🔥":prog.phase==="reps-up"?"📈":prog.phase==="new"?"🆕":"🔄"}</span>
         <span>{prog.note}</span>
       </div>}
 
-      {/* Logged sets */}
+      {/* Logged sets today */}
       {sets.length>0&&(
         <div style={{marginBottom:14}}>
           <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:8,paddingBottom:6,borderBottom:"1px solid #1C1C1E",marginBottom:6}}>
             {["SET","KG","REPS","TARGET",""].map(h=><div key={h} style={{fontSize:9,color:"#444",fontWeight:700,textAlign:"center",letterSpacing:0.5}}>{h}</div>)}
           </div>
-          {sets.map((set,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:8,alignItems:"center",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:700,color,textAlign:"center"}}>S{i+1}</div>
-              <div style={{fontSize:15,fontWeight:700,color:"#ccc",textAlign:"center"}}>{set.weight}kg</div>
-              <div style={{fontSize:15,fontWeight:700,color:"#ccc",textAlign:"center"}}>{set.reps}</div>
-              <div style={{fontSize:12,color:"#555",textAlign:"center"}}>tgt {set.targetReps}</div>
-              <button onClick={()=>onRemoveSet(i)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:14,textAlign:"center",padding:0}}>×</button>
-            </div>
-          ))}
+          {sets.map((set,i)=>{
+            const prev=lastSets[i];
+            const improved=prev&&parseFloat(set.weight)>parseFloat(prev.weight||0);
+            return(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 28px",gap:8,alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:12,fontWeight:700,color,textAlign:"center"}}>S{i+1}</div>
+                <div style={{fontSize:15,fontWeight:700,color:improved?"#22C55E":"#ccc",textAlign:"center"}}>
+                  {set.weight}kg{improved&&<span style={{fontSize:10}}> ↑</span>}
+                </div>
+                <div style={{fontSize:15,fontWeight:700,color:"#ccc",textAlign:"center"}}>{set.reps}</div>
+                <div style={{fontSize:12,color:"#555",textAlign:"center"}}>tgt {set.targetReps}</div>
+                <button onClick={()=>onRemoveSet(i)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:14,textAlign:"center",padding:0}}>×</button>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Add set inputs */}
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
         <div style={{flex:1}}>
-          <div style={{fontSize:10,color:"#555",fontWeight:600,letterSpacing:0.5,marginBottom:5}}>WEIGHT (kg)</div>
-          <input type="number" value={weight} onChange={e=>setWeight(e.target.value)} placeholder={prog?.weight?String(prog.weight):"0"}
+          <div style={{fontSize:10,color:"#555",fontWeight:600,letterSpacing:0.5,marginBottom:5}}>
+            WEIGHT (kg)
+            {lastSets[nextSetIdx]&&<span style={{color:"#444",fontWeight:400,marginLeft:4}}>last: {lastSets[nextSetIdx].weight}kg</span>}
+          </div>
+          <input type="number" value={weight} onChange={e=>setWeight(e.target.value)}
+            placeholder={prog?.weight?String(prog.weight):lastSets[nextSetIdx]?.weight||"0"}
             style={{width:"100%",background:"#1C1C1E",border:`1.5px solid ${weight?"#3A3A3C":"#2C2C2E"}`,borderRadius:10,padding:"12px 10px",color:"#fff",fontSize:18,fontWeight:700,textAlign:"center",outline:"none"}}/>
         </div>
         <div style={{flex:1}}>
-          <div style={{fontSize:10,color:"#555",fontWeight:600,letterSpacing:0.5,marginBottom:5}}>REPS</div>
-          <input type="number" value={reps} onChange={e=>setReps(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdd()} placeholder={prog?.targetReps?String(prog.targetReps):"0"}
+          <div style={{fontSize:10,color:"#555",fontWeight:600,letterSpacing:0.5,marginBottom:5}}>
+            REPS
+            {lastSets[nextSetIdx]&&<span style={{color:"#444",fontWeight:400,marginLeft:4}}>last: {lastSets[nextSetIdx].reps}</span>}
+          </div>
+          <input type="number" value={reps} onChange={e=>setReps(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&handleAdd()}
+            placeholder={prog?.targetReps?String(prog.targetReps):lastSets[nextSetIdx]?.reps||"0"}
             style={{width:"100%",background:"#1C1C1E",border:`1.5px solid ${reps?"#3A3A3C":"#2C2C2E"}`,borderRadius:10,padding:"12px 10px",color:"#fff",fontSize:18,fontWeight:700,textAlign:"center",outline:"none"}}/>
         </div>
         <button onClick={handleAdd} disabled={!weight||!reps}
