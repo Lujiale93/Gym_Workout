@@ -9,10 +9,36 @@ const TG  = { Push:"linear-gradient(135deg,#FF6B35,#FF8C42)", Pull:"linear-gradi
 const TBG = { Push:"rgba(255,107,53,0.1)", Pull:"rgba(59,158,255,0.1)", Legs:"rgba(34,197,94,0.1)" };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function mergedEx(type, customEx) {
-  if (!type || !BUILTIN[type]) return [];
-  const customs = (customEx[type] || []).map(c => ({ name:c.name, equipment:"custom", muscles:["custom"], secondary:[], tip:"", imgId:null, custom:true, dbId:c.id }));
-  return [...BUILTIN[type], ...customs];
+// Returns all exercises across all 3 days, grouped by day, filtering hidden ones
+function allExercises(customEx, hiddenEx) {
+  const hidden = hiddenEx || {};
+  return ["Push","Pull","Legs"].map(day => {
+    const builtins = (BUILTIN[day] || [])
+      .filter(e => !hidden[e.name])
+      .map(e => ({ ...e, day, custom:false }));
+    const customs = (customEx[day] || []).map(c => ({
+      name:c.name, equipment:"custom", muscles:["custom"], secondary:[], tip:"",
+      imgId:null, custom:true, dbId:c.id, day
+    }));
+    return { day, exercises:[...builtins, ...customs] };
+  });
+}
+
+// Flat list for a single day (used in session logging to find exercise data)
+function exForDay(day, customEx, hiddenEx) {
+  const hidden = hiddenEx || {};
+  const builtins = (BUILTIN[day] || []).filter(e => !hidden[e.name]).map(e => ({ ...e, day, custom:false }));
+  const customs  = (customEx[day] || []).map(c => ({ name:c.name, equipment:"custom", muscles:["custom"], secondary:[], tip:"", imgId:null, custom:true, dbId:c.id, day }));
+  return [...builtins, ...customs];
+}
+
+// Find exercise data across all days
+function findEx(name, customEx, hiddenEx) {
+  for (const day of ["Push","Pull","Legs"]) {
+    const found = exForDay(day, customEx, hiddenEx).find(e => e.name === name);
+    if (found) return found;
+  }
+  return null;
 }
 
 function getProgression(sessions, exName, setIndex) {
@@ -129,6 +155,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [sessions,    setSessions]    = useState([]);
   const [customEx,    setCustomEx]    = useState({ Push:[], Pull:[], Legs:[] });
+  const [hiddenEx,    setHiddenEx]    = useState({}); // { "Exercise Name": true }
   const [lastType,    setLastType]    = useState(null);
   const [dbLoading,   setDbLoading]   = useState(false);
   const [view,        setView]        = useState("home");
@@ -169,15 +196,16 @@ export default function App() {
       (c.data || []).forEach(e => { if (g[e.day]) g[e.day].push(e); });
       setCustomEx(g);
       setLastType(m.data?.last_type || null);
+      setHiddenEx(m.data?.hidden_ex || {});
       setDbLoading(false);
     });
   }, [user]);
 
   // Animate exercise images
   useEffect(() => {
-    if (view !== "session" || step !== "log" || !sessionType) return;
+    if (view !== "session" || step !== "log") return;
     const exName = selectedEx[activeExIdx];
-    const ex = mergedEx(sessionType, customEx).find(e => e.name === exName);
+    const ex = findEx(exName, customEx, hiddenEx);
     if (!ex?.imgId) return;
     clearInterval(animRef.current[ex.imgId]);
     animRef.current[ex.imgId] = setInterval(() =>
@@ -188,7 +216,7 @@ export default function App() {
   const showToast = (msg, color = "#3B9EFF") => { setToast({ msg, color }); setTimeout(() => setToast(null), 2800); };
 
   async function handleAddExercise({ name, day }) {
-    const all = mergedEx(day, customEx);
+    const all = exForDay(day, customEx, hiddenEx);
     if (all.some(e => e.name.toLowerCase() === name.toLowerCase())) { showToast("Already exists", "#FF3B30"); return; }
     const { data, error } = await supabase.from("custom_exercises").insert({ user_id:user.id, name, day }).select().single();
     if (error) { showToast("Failed to save", "#FF3B30"); return; }
@@ -217,7 +245,7 @@ export default function App() {
   }
 
   function confirmPick() {
-    if (selectedEx.length < 2) { showToast("Pick at least 2 exercises", "#FF3B30"); return; }
+    if (selectedEx.length < 1) { showToast("Select at least 1 exercise", "#FF3B30"); return; }
     const init = {};
     selectedEx.forEach(name => {
       init[name] = [0, 1, 2].map(si => {
@@ -238,6 +266,15 @@ export default function App() {
     setLoggedSets(p => { const u = { ...p }; u[name] = u[name].map((s, i) => i === si ? { ...s, done:true } : s); return u; });
     const r = parseInt(set.reps), t = set.targetReps;
     showToast(r >= t ? (t === 10 ? "🔥 Weight up next session!" : "✅ Reps up next session!") : "Logged! Push harder next time 💪");
+  }
+
+  async function toggleHideExercise(name) {
+    const newHidden = { ...hiddenEx };
+    if (newHidden[name]) delete newHidden[name];
+    else newHidden[name] = true;
+    setHiddenEx(newHidden);
+    await supabase.from("user_meta").upsert({ user_id:user.id, hidden_ex:newHidden }, { onConflict:"user_id" });
+    showToast(newHidden[name] ? `"${name}" hidden` : `"${name}" restored`, "#888");
   }
 
   async function finishSession() {
@@ -295,9 +332,9 @@ export default function App() {
   const NAV         = [{ v:"home", i:"🏠", l:"Home" }, { v:"history", i:"📋", l:"History" }, { v:"analysis", i:"📈", l:"Progress" }, { v:"exercises", i:"⚙️", l:"Exercises" }];
 
   // Session-specific derived values (safe — only used inside view==="session")
-  const currentExList = sessionType ? mergedEx(sessionType, customEx) : [];
+  const groupedExercises = allExercises(customEx, hiddenEx); // [{day, exercises}]
   const activeExName  = selectedEx[activeExIdx];
-  const activeExData  = currentExList.find(e => e.name === activeExName);
+  const activeExData  = findEx(activeExName, customEx, hiddenEx);
   const imgSrc        = activeExData?.imgId ? `${IMAGE_BASE}/${activeExData.imgId}/${imgFrame[activeExData.imgId] ?? 0}.jpg` : null;
 
   return (
@@ -418,36 +455,47 @@ export default function App() {
             {step === "pick" ? (
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                  <span style={{fontSize:14,color:"#666"}}>Select 4–6 exercises</span>
+                  <span style={{fontSize:14,color:"#666"}}>Mix from any day — no limits</span>
                   <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                    <span style={{fontSize:14,fontWeight:700,color:TC[sessionType]}}>{selectedEx.length}/6</span>
+                    <span style={{fontSize:14,fontWeight:700,color:TC[sessionType]}}>{selectedEx.length} selected</span>
                     <button onClick={() => setShowAddModal(true)} style={{background:TBG[sessionType],border:`1px solid ${TC[sessionType]}44`,color:TC[sessionType],padding:"6px 12px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Custom</button>
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
-                  {currentExList.map(ex => {
-                    const sel = selectedEx.includes(ex.name);
-                    const dis = !sel && selectedEx.length >= 6;
-                    const hasH = sessions.some(sess => sess.exercises?.some(e => e.name === ex.name));
-                    return (
-                      <button key={ex.name} disabled={dis} onClick={() => toggleEx(ex.name)}
-                        style={{padding:"14px 12px",borderRadius:16,textAlign:"left",border:`1.5px solid ${sel?TC[sessionType]:"#1C1C1E"}`,background:sel?TBG[sessionType]:"#111",opacity:dis?0.3:1,cursor:dis?"not-allowed":"pointer"}}>
-                        <div style={{fontSize:13,fontWeight:600,color:sel?TC[sessionType]:"#ccc",marginBottom:4,lineHeight:1.3}}>
-                          {ex.name}
-                          {ex.custom && <span style={{fontSize:9,background:TC[sessionType]+"22",color:TC[sessionType],padding:"1px 5px",borderRadius:4,marginLeft:5,fontWeight:700}}>CUSTOM</span>}
-                        </div>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <span style={{fontSize:11,color:"#555"}}>{ex.equipment}</span>
-                          {hasH && <span style={{fontSize:11,color:TC[sessionType],fontWeight:600}}>✓ tracked</span>}
-                        </div>
-                        <div style={{fontSize:11,color:"#333",marginTop:3}}>{[...ex.muscles,...(ex.secondary||[]).slice(0,1)].join(", ")}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button onClick={confirmPick} style={{width:"100%",padding:"16px",background:TG[sessionType],border:"none",borderRadius:16,color:"#fff",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:`0 8px 24px ${TC[sessionType]}40`}}>
-                  Start Session →
-                </button>
+
+                {groupedExercises.map(({ day, exercises }) => (
+                  <div key={day} style={{marginBottom:20}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{background:TG[day],borderRadius:8,padding:"3px 12px",fontSize:11,fontWeight:700,color:"#fff"}}>{day}</div>
+                      <div style={{height:1,flex:1,background:"#1C1C1E"}}/>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {exercises.map(ex => {
+                        const sel  = selectedEx.includes(ex.name);
+                        const hasH = sessions.some(sess => sess.exercises?.some(e => e.name === ex.name));
+                        return (
+                          <button key={ex.name} onClick={() => toggleEx(ex.name)}
+                            style={{padding:"12px 12px",borderRadius:14,textAlign:"left",border:`1.5px solid ${sel?TC[day]:"#1C1C1E"}`,background:sel?TBG[day]:"#111",cursor:"pointer"}}>
+                            <div style={{fontSize:12,fontWeight:600,color:sel?TC[day]:"#ccc",marginBottom:3,lineHeight:1.3}}>
+                              {ex.name}
+                              {ex.custom && <span style={{fontSize:9,background:TC[day]+"22",color:TC[day],padding:"1px 5px",borderRadius:4,marginLeft:5,fontWeight:700}}>CUSTOM</span>}
+                              {ex.day !== sessionType && <span style={{fontSize:9,background:"#2C2C2E",color:"#888",padding:"1px 5px",borderRadius:4,marginLeft:5}}>MIXED</span>}
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <span style={{fontSize:10,color:"#555"}}>{ex.equipment}</span>
+                              {hasH && <span style={{fontSize:10,color:TC[day],fontWeight:600}}>✓</span>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {selectedEx.length > 0 && (
+                  <button onClick={confirmPick} style={{width:"100%",padding:"16px",background:TG[sessionType],border:"none",borderRadius:16,color:"#fff",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:`0 8px 24px ${TC[sessionType]}40`,marginTop:4}}>
+                    Start Session ({selectedEx.length} exercises) →
+                  </button>
+                )}
               </div>
             ) : (
               <div>
@@ -658,17 +706,21 @@ export default function App() {
             </div>
 
             {["Push","Pull","Legs"].map(day => {
-              const customs  = customEx[day] || [];
-              const builtins = BUILTIN[day] || [];
-              const isOpen   = expandedDay === day;
+              const customs   = customEx[day] || [];
+              const builtins  = BUILTIN[day] || [];
+              const hiddenCount = builtins.filter(e => hiddenEx[e.name]).length;
+              const isOpen    = expandedDay === day;
               return (
                 <div key={day} style={{background:"#111",borderRadius:20,marginBottom:12,border:`1px solid ${TC[day]}22`,overflow:"hidden"}}>
-                  {/* Header — clicking expands built-in list */}
                   <button onClick={() => setExpandedDay(isOpen ? null : day)}
                     style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:18,background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
                       <div style={{background:TG[day],borderRadius:8,padding:"4px 14px",fontSize:12,fontWeight:700,color:"#fff"}}>{day}</div>
-                      <span style={{fontSize:13,color:"#555"}}>{builtins.length} built-in{customs.length ? `, ${customs.length} custom` : ""}</span>
+                      <span style={{fontSize:13,color:"#555"}}>
+                        {builtins.length - hiddenCount} visible
+                        {hiddenCount > 0 && <span style={{color:"#FF3B30"}}>, {hiddenCount} hidden</span>}
+                        {customs.length > 0 && <span style={{color:TC[day]}}>, {customs.length} custom</span>}
+                      </span>
                     </div>
                     <span style={{color:"#555",fontSize:16}}>{isOpen ? "▲" : "▼"}</span>
                   </button>
@@ -694,13 +746,23 @@ export default function App() {
                   {/* Built-in list (expandable) */}
                   {isOpen && (
                     <div style={{borderTop:"1px solid #1C1C1E",padding:"8px 18px 12px"}}>
-                      <div style={{fontSize:11,color:"#444",fontWeight:600,letterSpacing:0.5,marginBottom:10,marginTop:4}}>BUILT-IN EXERCISES</div>
-                      {builtins.map(ex => (
-                        <div key={ex.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #1C1C1E"}}>
-                          <span style={{fontSize:13,color:"#888"}}>{ex.name}</span>
-                          <span style={{fontSize:11,color:"#444"}}>{ex.equipment}</span>
-                        </div>
-                      ))}
+                      <div style={{fontSize:11,color:"#444",fontWeight:600,letterSpacing:0.5,marginBottom:10,marginTop:4}}>BUILT-IN EXERCISES — tap to hide ones you don't use</div>
+                      {(BUILTIN[day] || []).map(ex => {
+                        const hidden = hiddenEx[ex.name];
+                        return (
+                          <div key={ex.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #1C1C1E",opacity:hidden?0.4:1}}>
+                            <div>
+                              <span style={{fontSize:13,color:hidden?"#444":"#888"}}>{ex.name}</span>
+                              <span style={{fontSize:10,color:"#444",marginLeft:8}}>{ex.equipment}</span>
+                              {hidden && <span style={{fontSize:10,color:"#FF3B30",marginLeft:8,fontWeight:600}}>HIDDEN</span>}
+                            </div>
+                            <button onClick={() => toggleHideExercise(ex.name)}
+                              style={{background:hidden?"rgba(34,197,94,0.1)":"rgba(255,59,48,0.08)",border:`1px solid ${hidden?"rgba(34,197,94,0.3)":"rgba(255,59,48,0.2)"}`,color:hidden?"#22C55E":"#FF3B30",fontSize:11,padding:"4px 10px",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                              {hidden ? "Restore" : "Hide"}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
