@@ -38,7 +38,7 @@ const BUILTIN = {
     {name:"Dumbbell Incline Row",      equipment:"dumbbell",     muscles:["middle back"], secondary:["biceps","forearms"],   tip:"Chest-down on incline bench. Row to sides of chest, squeeze mid-back at top.", imgId:"Dumbbell_Incline_Row"},
     {name:"Leverage High Row",         equipment:"machine",      muscles:["middle back"], secondary:["lats"],                tip:"Pull down with pronated grip, leading with elbows. Controlled eccentric.", imgId:"Leverage_High_Row"},
     {name:"Lying T-Bar Row",           equipment:"machine",      muscles:["middle back"], secondary:["biceps","lats"],       tip:"Face-down on T-bar. Pull weight up, elbows flared, squeeze mid-back.", imgId:"Lying_T-Bar_Row"},
-    {name:"Bent Over Two-Dumbbell Row",equipment:"dumbbell",     muscles:["middle back"], secondary:["biceps","lats"],       tip:"Hinge forward with dumbbells. Row both up to sides simultaneously.", imgId:"Bent_Over_Two-Dumbbell_Row"},
+    {name:"Seated Machine Row",        equipment:"machine",      muscles:["middle back"], secondary:["biceps","lats"],       tip:"Sit chest against pad, grip handles. Pull back squeezing shoulder blades together. Control the return. Great for mid-back thickness.", imgId:"Leverage_Iso_Row"},
     {name:"Face Pulls",                equipment:"cable",        muscles:["shoulders"],   secondary:["middle back"],         tip:"High pulley, rope attachment. Pull to face with elbows flared high. Great for rear delts.", imgId:"Face_Pull"},
   ],
   Legs: [
